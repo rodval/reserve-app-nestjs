@@ -12,6 +12,11 @@ datasource db {
   provider = "postgresql"
 }
 
+enum Role {
+  USER
+  ADMIN
+}
+
 model User {
   id        Int      @id @default(autoincrement())
   createdAt DateTime @default(now())
@@ -22,4 +27,69 @@ model User {
 
   firstName String?
   lastName  String?
+
+  role Role @default(USER)
+
+  reservations Reservation[]
+}
+
+// Tipo de recurso reservable. Agregar valores acá requiere una migración.
+enum ResourceType {
+  SPACE // salas, canchas, oficinas...
+  EQUIPMENT // maquinaria, herramientas, vehículos...
+}
+
+model Resource {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name        String
+  description String?
+  type        ResourceType
+  location    String?
+  // Dato informativo: personas (espacios) o unidades (equipos).
+  // Cada recurso se reserva de forma exclusiva: una reserva a la vez.
+  capacity    Int?
+  // Datos propios de cada recurso: { "serialNumber": "...", "m2": 40 }
+  attributes  Json?
+  // Baja lógica: un recurso inactivo no se puede reservar ni aparece al público.
+  isActive    Boolean      @default(true)
+
+  reservations Reservation[]
+
+  @@index([type, isActive])
+}
+
+// PENDING -> CONFIRMED (lo hace un ADMIN)
+// PENDING | CONFIRMED -> CANCELLED (dueño o ADMIN)
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+model Reservation {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Intervalo semiabierto [startAt, endAt): una reserva que termina a las 10:00
+  // no choca con otra que empieza a las 10:00.
+  startAt     DateTime
+  endAt       DateTime
+  status      ReservationStatus @default(PENDING)
+  notes       String?
+  cancelledAt DateTime?
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Restrict: no se puede borrar un recurso con reservas (usamos baja lógica).
+  resourceId Int
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+
+  // Acelera la búsqueda de solapamientos por recurso.
+  @@index([resourceId, startAt, endAt])
+  @@index([userId])
 }
