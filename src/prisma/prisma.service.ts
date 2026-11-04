@@ -1,6 +1,11 @@
 // src/prisma/prisma.service.ts
-import 'dotenv/config';
-import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 
@@ -9,9 +14,12 @@ export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
-  constructor() {
+  private readonly logger = new Logger(PrismaService.name);
+
+  // ConfigService lo inyecta Nest; la variable ya fue validada al arrancar.
+  constructor(config: ConfigService) {
     const adapter = new PrismaPg({
-      connectionString: process.env.DATABASE_URL,
+      connectionString: config.getOrThrow<string>('DATABASE_URL'),
     });
 
     super({ adapter });
@@ -19,11 +27,11 @@ export class PrismaService
 
   async onModuleInit() {
     await this.$connect();
-    console.log('✅ Prisma conectado a PostgreSQL');
+    this.logger.log('Prisma conectado a PostgreSQL');
   }
 
   async onModuleDestroy() {
     await this.$disconnect();
-    console.log('❌ Prisma desconectado');
+    this.logger.log('Prisma desconectado');
   }
 }
