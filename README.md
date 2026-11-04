@@ -1,108 +1,86 @@
-<<<<<<< HEAD
 # reserve-app
 
-Initial commit content for the reserve-app project.
+API de reservas construida con [NestJS](https://nestjs.com/) y [Prisma](https://www.prisma.io/) sobre PostgreSQL.
 
-# Initial commit
+Permite reservar **recursos genéricos**: espacios (salas, canchas, oficinas) o maquinaria/equipos, validando que no haya reservas superpuestas para el mismo recurso.
 
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+## Requisitos
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+- Node.js 20+
+- Docker (para la base de datos)
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
-
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
+## Puesta en marcha
 
 ```bash
-$ npm install
+npm install
+cp .env.example .env
+npm run db:dev:restart   # levanta Postgres en Docker y aplica migraciones
+npm run db:seed          # crea el usuario ADMIN inicial
+npm run start:dev
 ```
 
-## Compile and run the project
+La API queda en `http://localhost:3000` y la documentación interactiva (Swagger) en **`http://localhost:3000/docs`**.
 
-```bash
-# development
-$ npm run start
+Para probar rutas protegidas en Swagger: ejecutá `POST /auth/signin`, copiá el `access_token`, tocá **Authorize** y pegalo.
 
-# watch mode
-$ npm run start:dev
+## Scripts útiles
 
-# production mode
-$ npm run start:prod
+| Script | Qué hace |
+| --- | --- |
+| `npm run start:dev` | Arranca la API en modo watch |
+| `npm run db:dev:restart` | Recrea la base de desarrollo (puerto 5434) y aplica migraciones |
+| `npm run db:test:restart` | Recrea la base de tests (puerto 5435) y aplica migraciones |
+| `npm run db:seed` | Crea o promueve el usuario ADMIN inicial |
+| `npm run prisma:generate` | Regenera el cliente de Prisma |
+| `npm run test` | Tests unitarios |
+| `npm run test:e2e` | Tests end-to-end (usan `.env.test`) |
+
+## Arquitectura
+
+Cada funcionalidad vive en su carpeta dentro de `src/` con su `module`, `controller` y `service`:
+
+```
+src/
+├── app.setup.ts  # ValidationPipe y filtros globales (compartido con e2e)
+├── auth/         # Signup/signin con JWT: dto, strategy, guard, decorator
+├── common/       # Piezas transversales (filtros, decoradores, guards)
+├── config/       # Validación de variables de entorno
+├── prisma/       # PrismaService global (acceso a la base)
+├── reservation/  # Reservas: solapamiento, disponibilidad, confirmar y cancelar
+├── resource/     # Recursos reservables (espacios y maquinaria)
+└── user/         # Usuarios
 ```
 
-## Run tests
+## Endpoints
 
-```bash
-# unit tests
-$ npm run test
+| Método | Ruta | Auth | Descripción |
+| --- | --- | --- | --- |
+| POST | `/auth/signup` | — | Registra un usuario y devuelve `access_token` |
+| POST | `/auth/signin` | — | Login, devuelve `access_token` |
+| GET | `/users/me` | Bearer | Usuario autenticado |
+| PATCH | `/users/me` | Bearer | Edita email, nombre o apellido |
+| PATCH | `/users/me/password` | Bearer | Cambia la contraseña (pide la actual) |
+| GET | `/users` | ADMIN | Lista de usuarios (sin hash) |
+| PATCH | `/users/:id/role` | ADMIN | Cambia el rol de otro usuario |
+| GET | `/resources` | Bearer | Lista recursos activos. Filtros: `type`, `search`, `includeInactive` (solo ADMIN) |
+| GET | `/resources/:id` | Bearer | Detalle de un recurso |
+| POST | `/resources` | ADMIN | Crea un recurso (`SPACE` o `EQUIPMENT`) |
+| PATCH | `/resources/:id` | ADMIN | Edita un recurso; `isActive: true` lo reactiva |
+| DELETE | `/resources/:id` | ADMIN | Baja lógica (`isActive: false`) |
+| POST | `/reservations` | Bearer | Reserva un recurso (`resourceId`, `startAt`, `endAt`, `notes?`). Queda `PENDING` |
+| GET | `/reservations/me` | Bearer | Mis reservas. Filtros: `status`, `from`, `to` |
+| GET | `/reservations/availability` | Bearer | Horarios ocupados de un recurso (`resourceId`, `from`, `to`) |
+| GET | `/reservations` | ADMIN | Todas. Filtros: `resourceId`, `userId`, `status`, `from`, `to` |
+| GET | `/reservations/:id` | Bearer | Detalle (dueño o ADMIN) |
+| PATCH | `/reservations/:id/confirm` | ADMIN | `PENDING` → `CONFIRMED` |
+| PATCH | `/reservations/:id/cancel` | Bearer | Cancela (dueño antes de que empiece, o ADMIN) |
 
-# e2e tests
-$ npm run test:e2e
+### Reglas de reserva
 
-# test coverage
-$ npm run test:cov
-```
+- Las fechas van en ISO 8601 (`2026-11-10T14:00:00Z`). Los intervalos son `[startAt, endAt)`: una reserva de 10 a 12 no choca con otra de 12 a 14.
+- Cada recurso se reserva de forma exclusiva. `PENDING` y `CONFIRMED` ocupan el horario; `CANCELLED` lo libera.
+- El chequeo de solapamiento corre en una transacción con un advisory lock de Postgres por recurso, así dos pedidos simultáneos no pueden reservar el mismo horario.
 
-## Deployment
+Los roles son `USER` (por defecto) y `ADMIN`. El primer admin se crea con `npm run db:seed` usando `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` del `.env`.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
-=======
-# reserve-app
->>>>>>> ba2c36657f62367ca98198ec658e3928a56d20a6
+`PrismaModule` es `@Global()`, así que cualquier service puede inyectar `PrismaService` sin importar el módulo.
